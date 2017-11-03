@@ -28,6 +28,9 @@
                 @keydown.enter.prevent="openDropdown"
                 @keydown.space.prevent="openDropdown"
                 @keydown.tab="onBlur"
+                @keydown.up.prevent="highlightPreviousOption"
+                @keydown.down.prevent="highlightNextOption"
+                @keydown.self="highlightQuickMatch"
             >
                 <div
                     class="ui-select__label-text"
@@ -56,12 +59,13 @@
                         ref="dropdown"
                         tabindex="-1"
 
-                        @keydown.down.prevent="highlightOption(highlightedIndex + 1)"
-                        @keydown.enter.prevent.stop="selectHighlighted(highlightedIndex, $event)"
+                        @keydown.enter.prevent.stop="selectHighlighted"
+                        @keydown.space.prevent.stop="selectHighlighted"
                         @keydown.esc.prevent="closeDropdown()"
                         @keydown.tab="onBlur"
-                        @keydown.up.prevent="highlightOption(highlightedIndex - 1)"
-
+                        @keydown.up.prevent.stop="highlightPreviousOption"
+                        @keydown.down.prevent.stop="highlightNextOption"
+                        @keydown.self="highlightQuickMatch"
                         v-show="showDropdown"
                     >
                         <div
@@ -100,8 +104,7 @@
                         <ul class="ui-select__options" ref="optionsList">
                             <ui-select-option
                                 ref="options"
-
-                                :highlighted="highlightedIndex === index"
+                                :highlighted="isOptionHighlighted(option)"
                                 :keys="keys"
                                 :key="index"
                                 :multiple="multiple"
@@ -109,15 +112,15 @@
                                 :selected="isOptionSelected(option)"
                                 :type="type"
 
-                                @click.native.stop="selectOption(option, index)"
-                                @mouseover.native.stop="highlightOption(index, { autoScroll: false })"
+                                @click.native.stop="selectOption(option)"
+                                @mouseover.native.stop="onMouseover(option)"
 
                                 v-for="(option, index) in filteredOptions"
                             >
                                 <slot
                                     name="option"
 
-                                    :highlighted="highlightedIndex === index"
+                                    :highlighted="isOptionHighlighted(option)"
                                     :index="index"
                                     :option="option"
                                     :selected="isOptionSelected(option)"
@@ -154,6 +157,8 @@ import config from './config';
 import fuzzysearch from 'fuzzysearch';
 import { looseIndexOf, looseEqual } from './helpers/util';
 import { scrollIntoView, resetScroll } from './helpers/element-scroll';
+import startswith from 'lodash.startswith';
+import sortby from 'lodash.sortby';
 
 export default {
     name: 'ui-select',
@@ -237,10 +242,11 @@ export default {
             query: '',
             isActive: false,
             isTouched: false,
-            selectedIndex: -1,
-            highlightedIndex: -1,
+            highlightedOption: null,
             showDropdown: false,
-            initialValue: JSON.stringify(this.value)
+            initialValue: JSON.stringify(this.value),
+            quickMatchString: '',
+            quickMatchTimeout: null
         };
     },
 
@@ -344,12 +350,59 @@ export default {
             }
 
             return this.value[this.keys.value] || this.value;
+        },
+
+        // Returns the index of the currently highlighted option
+        highlightedIndex() {
+            return this.options.findIndex(option => looseEqual(this.highlightedOption, option));
+        },
+
+        // Returns the index of the currently selected option, -1 if multi-select
+        selectedIndex() {
+            if (this.multiple) {
+                return -1;
+            }
+            return this.options.findIndex(option => looseEqual(this.value, option));
+        },
+
+        // Returns an array containing the options and extra annotations
+        annotatedOptions() {
+            const options = JSON.parse(JSON.stringify(this.options));
+            return options.map((option, index) => {
+                // If not object, create object
+                if (typeof option !== 'object') {
+                    option = {
+                        [this.keys.value]: option,
+                        [this.keys.label]: option
+                    };
+                }
+
+                // Add index to object
+                option.index = index;
+
+                // Check if valid prev/next
+                if (!option.disabled) {
+                    if (index < this.highlightedIndex) {
+                        option.validPreviousOption = true;
+                    } else if (index > this.highlightedIndex) {
+                        option.validNextOption = true;
+                    }
+                }
+
+                // Check if matches
+                option.startsWith = startswith(
+                    option[this.keys.label].toLowerCase(),
+                    this.quickMatchString.toLowerCase()
+                );
+
+                return option;
+            });
         }
     },
 
     watch: {
         filteredOptions() {
-            this.highlightedIndex = 0;
+            this.highlightedOption = this.filteredOptions[0];
             resetScroll(this.$refs.optionsList);
         },
 
@@ -365,6 +418,18 @@ export default {
 
         query() {
             this.$emit('query-change', this.query);
+        },
+
+        quickMatchString(string) {
+            if (string) {
+                if (this.quickMatchTimeout) {
+                    clearTimeout(this.quickMatchTimeout);
+                    this.quickMatchTimeout = null;
+                }
+                this.quickMatchTimeout = setTimeout(() => {
+                    this.quickMatchString = '';
+                }, 500);
+            }
         }
     },
 
@@ -390,49 +455,105 @@ export default {
             this.$emit('change', value);
         },
 
-        highlightOption(index, options = { autoScroll: true }) {
-            if (this.highlightedIndex === index || this.$refs.options.length === 0) {
+        // Highlights the matching option on key input
+        highlightQuickMatch(event) {
+            // https://github.com/ccampbell/mousetrap/blob/master/mousetrap.js#L39
+            const specialKeyCodes =
+                [8, 9, 13, 16, 17, 18, 20, 27, 32, 33, 34, 35, 36, 37, 38, 39, 40, 45, 46, 91, 93, 224];
+            const keyCode = event.keyCode;
+            if (specialKeyCodes.includes(keyCode)) {
                 return;
             }
 
-            const firstIndex = 0;
-            const lastIndex = this.$refs.options.length - 1;
+            const character = event.key.toString();
+            if (this.hasSearch) {
+                this.openDropdown();
+            } else {
+                this.quickMatchString += character;
+                let matchingItems = this.annotatedOptions.filter(option =>
+                    option.startsWith && !option.disabled
+                );
+                if (matchingItems.length !== 0) {
+                    matchingItems = sortby(matchingItems, [this.keys.label]);
+                    matchingItems = sortby(matchingItems, item => item[this.keys.label].length);
+                    this.highlightOption(this.options[matchingItems[0].index]);
+                }
+            }
+        },
 
-            if (index < firstIndex) {
-                index = lastIndex;
-            } else if (index > lastIndex) {
-                index = firstIndex;
+        // Highlights the previous valid option
+        highlightPreviousOption() {
+            const options = this.annotatedOptions;
+            let validPreviousOptionIndex = -1;
+            for (let i = 0; i < options.length; i++) {
+                if (options[i].validPreviousOption) {
+                    validPreviousOptionIndex = i;
+                }
+            }
+            if (validPreviousOptionIndex !== -1) {
+                this.highlightOption(this.options[validPreviousOptionIndex]);
+            }
+        },
+
+        // Highlights the next valid option
+        highlightNextOption() {
+            const options = this.annotatedOptions;
+            const validNextOptionIndex = options.findIndex(option => option.validNextOption);
+            if (validNextOptionIndex !== -1) {
+                this.highlightOption(this.options[validNextOptionIndex]);
+            }
+        },
+
+        // Highlights the option
+        highlightOption(option, options = { autoScroll: true }) {
+            if (
+                !option ||
+                option.disabled ||
+                looseEqual(this.highlightedOption, option) ||
+                this.$refs.options.length === 0
+            ) {
+                return;
             }
 
-            this.highlightedIndex = index;
+            this.highlightedOption = option;
+            this.openDropdown();
 
             if (options.autoScroll) {
-                this.scrollOptionIntoView(this.$refs.options[index].$el);
+                const index = this.filteredOptions.findIndex(option => looseEqual(this.highlightedOption, option));
+                const optionToScrollTo = this.$refs.options[index];
+                if (optionToScrollTo) {
+                    this.scrollOptionIntoView(optionToScrollTo.$el);
+                }
             }
         },
 
-        selectHighlighted(index, e) {
-            if (this.$refs.options.length > 0) {
-                e.preventDefault();
-                this.selectOption(this.$refs.options[index].option, index);
+        selectHighlighted() {
+            if (
+                this.highlightedOption &&
+                !this.highlightedOption.disabled &&
+                this.$refs.options.length > 0
+            ) {
+                this.selectOption(this.highlightedOption);
             }
         },
 
-        selectOption(option, index, options = { autoClose: true }) {
+        selectOption(option, options = { autoClose: true }) {
+            if (!option || option.disabled) {
+                return;
+            }
+
             const shouldSelect = this.multiple && !this.isOptionSelected(option);
 
             if (this.multiple) {
                 this.updateOption(option, { select: shouldSelect });
             } else {
                 this.setValue(option);
-                this.selectedIndex = index;
             }
 
             this.$emit('select', option, {
                 selected: this.multiple ? shouldSelect : true
             });
 
-            this.highlightedIndex = index;
             this.clearQuery();
 
             if (!this.multiple && options.autoClose) {
@@ -440,11 +561,15 @@ export default {
             }
         },
 
+        // Checks if option is highlighted
+        isOptionHighlighted(option) {
+            return looseEqual(this.highlightedOption, option);
+        },
+
         isOptionSelected(option) {
             if (this.multiple) {
                 return looseIndexOf(this.value, option) > -1;
             }
-
             return looseEqual(this.value, option);
         },
 
@@ -492,6 +617,10 @@ export default {
                 return;
             }
 
+            if (this.highlightedIndex === -1) {
+                this.highlightNextOption();
+            }
+
             this.showDropdown = true;
 
             // IE: clicking label doesn't focus the select element
@@ -503,7 +632,7 @@ export default {
 
         closeDropdown(options = { autoBlur: false }) {
             this.showDropdown = false;
-
+            this.query = '';
             if (!this.isTouched) {
                 this.isTouched = true;
                 this.$emit('touch');
@@ -513,6 +642,12 @@ export default {
                 this.isActive = false;
             } else {
                 this.$refs.label.focus();
+            }
+        },
+
+        onMouseover(option) {
+            if (this.showDropdown) {
+                this.highlightOption(option, { autoScroll: false });
             }
         },
 
@@ -537,12 +672,19 @@ export default {
         onOpen() {
             this.$nextTick(() => {
                 this.$refs[this.hasSearch ? 'searchInput' : 'dropdown'].focus();
-                this.scrollOptionIntoView(this.$refs.optionsList.querySelector('.is-selected'));
+                const selectedOption = this.$refs.optionsList.querySelector('.is-selected');
+                if (selectedOption) {
+                    this.scrollOptionIntoView(selectedOption);
+                } else {
+                    this.scrollOptionIntoView(
+                        this.$refs.optionsList.querySelector('.ui-select-option:not(.is-disabled)')
+                    );
+                }
             });
         },
 
         onClose() {
-            this.highlightedIndex = this.multiple ? -1 : this.selectedIndex;
+            this.highlightedOption = this.multiple ? null : this.value;
         },
 
         onExternalClick(e) {
@@ -566,9 +708,7 @@ export default {
             this.setValue(JSON.parse(this.initialValue));
             this.clearQuery();
             this.resetTouched();
-
-            this.selectedIndex = -1;
-            this.highlightedIndex = -1;
+            this.highlightedOption = null;
         },
 
         resetTouched(options = { touched: false }) {
@@ -756,6 +896,11 @@ export default {
 
 .ui-select__display-value {
     flex-grow: 1;
+
+    // if inline-block
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 
     &.is-placeholder {
         color: $hint-text-color;
