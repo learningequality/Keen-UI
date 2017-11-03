@@ -1,18 +1,6 @@
 <template>
     <li class="ui-select-option" :class="classes">
         <slot>
-            <div class="ui-select-option__basic" v-if="type === 'basic'">
-                {{ option[keys.label] || option }}
-            </div>
-
-            <div class="ui-select-option__image" v-if="type === 'image'">
-                <div class="ui-select-option__image-object" :style="imageStyle"></div>
-
-                <div
-                    class="ui-select-option__image-text"
-                >{{ option[keys.label] }}</div>
-            </div>
-
             <div class="ui-select-option__checkbox" v-if="multiple">
                 <ui-icon v-if="selected">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -25,6 +13,18 @@
                         <path d="M18.984 3C20.062 3 21 3.938 21 5.016v13.97C21 20.062 20.062 21 18.984 21H5.014C3.938 21 3 20.064 3 18.986V5.015C3 3.94 3.936 3 5.014 3h13.97zm0 2.016H5.014v13.97h13.97V5.015z"/>
                     </svg>
                 </ui-icon>
+            </div>
+
+            <div class="ui-select-option__basic" v-if="type === 'basic'">
+                {{ option[keys.label] || option }}
+            </div>
+
+            <div class="ui-select-option__image" v-if="type === 'image'">
+                <div class="ui-select-option__image-object" :style="imageStyle"></div>
+
+                <div
+                    class="ui-select-option__image-text"
+                >{{ option[keys.label] }}</div>
             </div>
         </slot>
     </li>
@@ -73,7 +73,8 @@ export default {
             return [
                 `ui-select-option--type-${this.type}`,
                 { 'is-highlighted': this.highlighted },
-                { 'is-selected': this.selected }
+                { 'is-selected': this.selected },
+                { 'is-disabled': this.option.disabled }
             ];
         },
 
@@ -111,8 +112,14 @@ $ui-select-option-checkbox-color: rgba(black, 0.38) !default;
         }
     }
 
-    &.is-highlighted {
+    &.is-highlighted:not(.is-disabled) {
         background-color: rgba(black, 0.1);
+    }
+
+    &.is-disabled {
+        color: $secondary-text-color;
+        cursor: default;
+        opacity: 0.5;
     }
 }
 
@@ -137,7 +144,7 @@ $ui-select-option-checkbox-color: rgba(black, 0.38) !default;
 
 .ui-select-option__checkbox {
     color: $ui-select-option-checkbox-color;
-    margin-left: auto;
+    margin-right: rem-calc(8px);
 }
 
 // ================================================
