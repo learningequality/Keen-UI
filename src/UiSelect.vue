@@ -670,6 +670,7 @@ export default {
         },
 
         onOpen() {
+            this.highlightedOption = this.multiple ? null : this.value;
             this.$nextTick(() => {
                 this.$refs[this.hasSearch ? 'searchInput' : 'dropdown'].focus();
                 const selectedOption = this.$refs.optionsList.querySelector('.is-selected');
