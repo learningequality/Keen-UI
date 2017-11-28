@@ -152,6 +152,15 @@
                                     <p>See the <b>Using SVG: <code>&lt;use&gt;</code></b> section above for details.</p>
                                 </td>
                             </tr>
+
+                            <tr>
+                                <td>mirror</td>
+                                <td>Boolean</td>
+                                <td><code>false</code></td>
+                                <td>
+                                    <p>Whether or not to mirror the icon. Useful for RTL support of certain icons.</p>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
