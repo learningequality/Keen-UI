@@ -16,6 +16,7 @@
                     :icon="icon"
                     :remove-text="iconProps.removeText"
                     :use-svg="iconProps.useSvg"
+                    :mirror="iconProps.mirror"
 
                     v-if="icon"
                 ></ui-icon>

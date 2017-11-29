@@ -1,5 +1,5 @@
 <template>
-    <span class="ui-icon" :class="[iconSet, icon]" :aria-label="ariaLabel">
+    <span class="ui-icon" :class="[iconSet, icon, { 'is-mirrored': mirror }]" :aria-label="ariaLabel">
         <svg class="ui-icon__svg" v-if="useSvg">
             <use xmlns:xlink="http://www.w3.org/1999/xlink" :xlink:href="'#' + icon"></use>
         </svg>
@@ -24,6 +24,10 @@ export default {
             default: false
         },
         useSvg: {
+            type: Boolean,
+            default: false
+        },
+        mirror: {
             type: Boolean,
             default: false
         }
@@ -53,6 +57,10 @@ $ui-icon-size       : 1em !default;
         margin: 0;
         padding: 0;
         width: $ui-icon-size;
+    }
+
+    &.is-mirrored {
+        transform: scaleX(-1);
     }
 }
 </style>
