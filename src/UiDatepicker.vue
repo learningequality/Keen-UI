@@ -19,13 +19,13 @@
                 class="ui-datepicker__label"
                 ref="label"
 
-                :tabindex="disabled ? null : '0'"
+                :tabindex="disabled ? null : (tabindex || '0')"
 
-                @click="onClick"
                 @focus="onFocus"
-                @keydown.enter.prevent="openPicker"
-                @keydown.space.prevent="openPicker"
-                @keydown.tab="onBlur"
+                @click="togglePicker({ returnFocus: false })"
+                @keydown.enter.prevent="togglePicker({ returnFocus: false })"
+                @keydown.space.prevent="togglePicker({ returnFocus: false })"
+                @keydown.tab="onTabAway"
             >
                 <div
                     class="ui-datepicker__label-text"
@@ -49,6 +49,36 @@
                         </svg>
                     </ui-icon>
                 </div>
+
+                <ui-popover
+                    contain-focus
+                    open-on="manual"
+                    ref="popover"
+
+                    :close-on-scroll="false"
+                    :append-to-body="appendDropdownToBody"
+                    :z-index="dropdownZIndex"
+
+                    @close="onPickerClose"
+                    @open="onPickerOpen"
+
+                    v-if="usesPopover"
+                    v-show="!disabled"
+                >
+                    <ui-datepicker-calendar
+                        :color="color"
+                        :date-filter="dateFilter"
+                        :lang="lang"
+                        :max-date="maxDate"
+                        :min-date="minDate"
+                        :orientation="orientation"
+                        :current-view.sync="calendarView"
+                        :value="date"
+                        :start-of-week="startOfWeek"
+                        :year-range="yearRange"
+                        @date-select="onDateSelect"
+                    ></ui-datepicker-calendar>
+                </ui-popover>
             </div>
 
             <div class="ui-datepicker__feedback" v-if="hasFeedback">
@@ -65,69 +95,38 @@
         <ui-modal
             ref="modal"
             remove-header
+            size="auto"
 
-            @close="onPickerClose"
+            @hidden="onPickerClose"
             @open="onPickerOpen"
 
             v-if="usesModal && !disabled"
         >
-            <ui-calendar
+            <ui-datepicker-calendar
                 :color="color"
                 :date-filter="dateFilter"
                 :lang="lang"
                 :max-date="maxDate"
                 :min-date="minDate"
                 :orientation="orientation"
-                :value="value"
+                :current-view.sync="calendarView"
+                :value="date"
+                :start-of-week="startOfWeek"
+                :year-range="yearRange"
                 @date-select="onDateSelect"
-            >
-                <div class="ui-datepicker__modal-buttons" slot="footer">
-                    <ui-button
-                        type="secondary"
-                        :color="color"
-                        @click="$refs.modal.close()"
-                    >{{ okButtonText }}</ui-button>
-
-                    <ui-button
-                        type="secondary"
-                        :color="color"
-                        @click="onPickerCancel"
-                    >{{ cancelButtonText }}</ui-button>
-                </div>
-            </ui-calendar>
+            ></ui-datepicker-calendar>
         </ui-modal>
-
-        <ui-popover
-            contain-focus
-            ref="popover"
-            trigger="label"
-
-            @close="onPickerClose"
-            @open="onPickerOpen"
-
-            v-if="usesPopover && !disabled"
-        >
-            <ui-calendar
-                :color="color"
-                :date-filter="dateFilter"
-                :lang="lang"
-                :max-date="maxDate"
-                :min-date="minDate"
-                :orientation="orientation"
-                :value="value"
-                @date-select="onDateSelect"
-            ></ui-calendar>
-        </ui-popover>
     </div>
 </template>
 
 <script>
 import UiButton from './UiButton.vue';
-import UiCalendar from './UiCalendar.vue';
+import UiDatepickerCalendar from './UiDatepickerCalendar.vue';
 import UiIcon from './UiIcon.vue';
 import UiModal from './UiModal.vue';
 import UiPopover from './UiPopover.vue';
 
+import RespondsToExternalClick from './mixins/RespondsToExternalClick';
 import dateUtils from './helpers/date';
 
 export default {
@@ -135,7 +134,12 @@ export default {
 
     props: {
         name: String,
-        value: Date,
+        value: [Date, String],
+        tabindex: [String, Number],
+        startOfWeek: {
+            type: Number,
+            default: 0
+        },
         minDate: Date,
         maxDate: Date,
         yearRange: Array,
@@ -159,14 +163,12 @@ export default {
             type: String,
             default: 'popover' // 'popover' or 'modal'
         },
-        okButtonText: {
+        defaultView: {
             type: String,
-            default: 'OK'
+            default: 'date'
         },
-        cancelButtonText: {
-            type: String,
-            default: 'Cancel'
-        },
+        appendDropdownToBody: Boolean,
+        dropdownZIndex: Number,
         placeholder: String,
         icon: String,
         iconPosition: {
@@ -194,12 +196,16 @@ export default {
         return {
             isActive: false,
             isTouched: false,
-            valueAtModalOpen: null,
-            initialValue: JSON.stringify(this.value)
+            initialValue: JSON.stringify(this.value),
+            calendarView: this.defaultView
         };
     },
 
     computed: {
+        date() {
+            return typeof this.value === 'string' ? new Date(this.value) : this.value;
+        },
+
         classes() {
             return [
                 `ui-datepicker--icon-position-${this.iconPosition}`,
@@ -229,11 +235,11 @@ export default {
         },
 
         isLabelInline() {
-            return !this.value && !this.isActive;
+            return !this.date && !this.isActive;
         },
 
         hasFeedback() {
-            return Boolean(this.help) || Boolean(this.error) || Boolean(this.$slots.error);
+            return this.showError || this.showHelp;
         },
 
         showError() {
@@ -241,17 +247,17 @@ export default {
         },
 
         showHelp() {
-            return !this.showError && (Boolean(this.help) || Boolean(this.$slots.help));
+            return Boolean(this.help) || Boolean(this.$slots.help);
         },
 
         displayText() {
-            if (!this.value) {
+            if (!this.date) {
                 return '';
             }
 
             return this.customFormatter ?
-                this.customFormatter(this.value, this.lang) :
-                dateUtils.humanize(this.value, this.lang);
+                this.customFormatter(this.date, this.lang) :
+                dateUtils.humanize(this.date, this.lang);
         },
 
         hasDisplayText() {
@@ -259,8 +265,8 @@ export default {
         },
 
         submittedValue() {
-            return this.value ?
-                `${this.value.getFullYear()}-${this.value.getMonth()}-${this.value.getDate()}` :
+            return this.date ?
+                `${this.date.getFullYear()}-${1 + this.date.getMonth()}-${this.date.getDate()}` :
                 '';
         },
 
@@ -273,12 +279,14 @@ export default {
         }
     },
 
-    mounted() {
-        document.addEventListener('click', this.onExternalClick);
-    },
-
-    beforeDestroy() {
-        document.removeEventListener('click', this.onExternalClick);
+    watch: {
+        isActive(value) {
+            if (value) {
+                this.addExternalClickListener([this.$el, this.getPicker().$el], this.onExternalClick);
+            } else {
+                this.removeExternalClickListener();
+            }
+        }
     },
 
     methods: {
@@ -287,29 +295,37 @@ export default {
             this.closePicker();
         },
 
+        isPickerOpen() {
+            return this.usesModal ? this.$refs.modal.isOpen : this.$refs.popover.isOpen();
+        },
+
+        getPicker() {
+            return this.$refs[this.usesModal ? 'modal' : 'popover'];
+        },
+
         openPicker() {
             if (this.disabled) {
                 return;
             }
 
-            this.$refs[this.usesModal ? 'modal' : 'popover'].open();
+            this.getPicker().open();
         },
 
-        closePicker(options = { autoBlur: false }) {
-            if (this.usesPopover) {
-                this.$refs.popover.close();
-            }
+        closePicker(options = { returnFocus: true }) {
+            this.getPicker().close();
 
-            if (options.autoBlur) {
-                this.isActive = false;
-            } else {
+            this.calendarView = this.defaultView;
+
+            if (options.returnFocus) {
                 this.$refs.label.focus();
             }
         },
 
-        onClick() {
-            if (this.usesModal && !this.disabled) {
-                this.$refs.modal.open();
+        togglePicker(options = { returnFocus: true }) {
+            if (this.isPickerOpen()) {
+                this.closePicker(options);
+            } else {
+                this.openPicker();
             }
         },
 
@@ -318,21 +334,16 @@ export default {
             this.$emit('focus', e);
         },
 
-        onBlur(e) {
+        onTabAway(e) {
             this.isActive = false;
             this.$emit('blur', e);
 
-            if (this.usesPopover && this.$refs.popover.dropInstance.isOpened()) {
-                this.closePicker({ autoBlur: true });
+            if (this.isPickerOpen()) {
+                this.closePicker({ returnFocus: false });
             }
         },
 
         onPickerOpen() {
-            if (this.usesModal) {
-                this.valueAtModalOpen = this.value ? dateUtils.clone(this.value) : null;
-            }
-
-            this.isActive = true;
             this.$emit('open');
         },
 
@@ -345,26 +356,16 @@ export default {
             }
         },
 
-        onPickerCancel() {
-            this.$emit('input', this.valueAtModalOpen);
-            this.$refs.modal.close();
+        onExternalClick() {
+            this.isActive = false;
         },
 
-        onExternalClick(e) {
-            if (this.disabled) {
-                return;
-            }
+        focus() {
+            this.$refs.label.focus();
+        },
 
-            const clickWasInternal = this.$el.contains(e.target) ||
-                this.$refs[this.usesPopover ? 'popover' : 'modal'].$el.contains(e.target);
-
-            if (clickWasInternal) {
-                return;
-            }
-
-            if (this.isActive) {
-                this.isActive = false;
-            }
+        clear() {
+            this.$emit('input', null);
         },
 
         reset() {
@@ -378,11 +379,15 @@ export default {
 
     components: {
         UiButton,
-        UiCalendar,
+        UiDatepickerCalendar,
         UiIcon,
         UiModal,
         UiPopover
-    }
+    },
+
+    mixins: [
+        RespondsToExternalClick
+    ]
 };
 </script>
 
@@ -491,14 +496,6 @@ export default {
 
     .ui-modal:not(.has-footer) .ui-modal__body {
         padding: 0;
-
-        .ui-calendar__body {
-            height: rem-calc(348px);
-        }
-    }
-
-    .ui-modal__container {
-        width: rem-calc(268px);
     }
 }
 
@@ -544,7 +541,7 @@ export default {
     color: $ui-input-text-color;
     cursor: pointer;
     display: flex;
-    font-family: $font-stack;
+    font-family: inherit;
     font-size: $ui-input-text-font-size;
     font-weight: normal;
     height: $ui-input-height;
@@ -567,7 +564,7 @@ export default {
     color: $ui-input-button-color;
     font-size: $ui-input-button-size;
     margin-left: auto;
-    margin-right: rem-calc(-4px);
+    margin-right: rem(-4px);
 }
 
 .ui-datepicker__feedback {
@@ -579,34 +576,15 @@ export default {
     position: relative;
 }
 
-.ui-datepicker__modal-buttons {
-    display: flex;
-    justify-content: flex-end;
-
-    .ui-button {
-        min-width: rem-calc(64px);
-    }
-}
-
 // ================================================
 // Icon Positions
 // ================================================
 
 .ui-datepicker--icon-position-right {
     .ui-datepicker__icon-wrapper {
-        margin-left: rem-calc(8px);
+        margin-left: rem(8px);
         margin-right: 0;
         order: 1;
-    }
-}
-
-// ================================================
-// Orientations
-// ================================================
-
-.ui-datepicker--orientation-landscape {
-    .ui-modal__container {
-        width: rem-calc(396px);
     }
 }
 </style>

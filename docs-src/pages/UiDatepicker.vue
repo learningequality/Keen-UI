@@ -44,6 +44,14 @@
                 v-model="picker4"
             >Christmas Day</ui-datepicker>
 
+            <h4 class="page__demo-title">With ISO 8601 string as value</h4>
+
+            <ui-datepicker
+                icon="events"
+                placeholder="Select a date"
+                v-model="picker401"
+            >Your Birthday</ui-datepicker>
+
             <h4 class="page__demo-title">Color: accent</h4>
 
             <ui-datepicker
@@ -79,6 +87,14 @@
                 picker-type="modal"
                 placeholder="Select a date"
                 v-model="picker8"
+            >Your Birthday</ui-datepicker>
+
+            <h4 class="page__demo-title">With different start of week: Monday</h4>
+
+            <ui-datepicker
+                placeholder="Select a date"
+                :start-of-week="1"
+                v-model="picker801"
             >Your Birthday</ui-datepicker>
 
             <h4 class="page__demo-title">With custom formatter</h4>
@@ -131,6 +147,25 @@
                 v-model="picker12"
             >A Special Day</ui-datepicker>
 
+            <h4 class="page__demo-title">With custom year range</h4>
+
+            <ui-datepicker
+                icon="events"
+                orientation="landscape"
+                placeholder="Select a date from this year"
+                :yearRange="[(new Date).getFullYear()]"
+                v-model="picker1201"
+            >A Special Day</ui-datepicker>
+
+            <h4 class="page__demo-title">With year picker as a default view</h4>
+
+            <ui-datepicker
+                icon="events"
+                default-view="year"
+                placeholder="Select a date"
+                v-model="picker1202"
+            >A Special Day</ui-datepicker>
+
             <h4 class="page__demo-title">With validation: required</h4>
 
             <ui-datepicker
@@ -143,6 +178,19 @@
 
                 v-model="picker13"
             >A Special Day</ui-datepicker>
+
+            <h4 class="page__demo-title">In a modal, appending to <code>&lt;body&gt;</code></h4>
+
+            <ui-button @click="openModal">Open Modal</ui-button>
+            <ui-modal ref="modal" title="Modal with datepicker">
+                <div>Modal content: Lorem ipsum dolor sit amet, consectetur adipisicing elit. Natus et id, provident culpa vel accusantium possimus fugiat libero tenetur labore!</div>
+                <br>
+                <ui-datepicker
+                    placeholder="Select a date"
+                    append-dropdown-to-body
+                    v-model="picker1301"
+                >Your Birthday</ui-datepicker>
+            </ui-modal>
 
             <h4 class="page__demo-title">Disabled</h4>
 
@@ -180,12 +228,19 @@
                         <tbody>
                             <tr>
                                 <td class="no-wrap">value, v-model *</td>
-                                <td>Date</td>
+                                <td>Date, String</td>
                                 <td></td>
                                 <td>
                                     <p>The model the selected date syncs to. Can be set initially for a default value.</p>
                                     <p>If you are not using <code>v-model</code>, you should listen for the <code>input</code> event and update <code>value</code>.</p>
                                 </td>
+                            </tr>
+
+                            <tr>
+                                <td>startOfWeek</td>
+                                <td>Number</td>
+                                <td><code>0</code></td>
+                                <td>A number corresponding to the start day of the week. <code>0</code> is Sunday, <code>1</code> is Monday, and so on.</td>
                             </tr>
 
                             <tr>
@@ -269,6 +324,13 @@
                             </tr>
 
                             <tr>
+                                <td>defaultView</td>
+                                <td>String</td>
+                                <td><code>"date"</code></td>
+                                <td>The default view of the datepicker calendar. One of <code>date</code> or <code>year</code>. When set to <code>year</code>, the datepicker will open with year selector.</td>
+                            </tr>
+
+                            <tr>
                                 <td>pickerType</td>
                                 <td>String</td>
                                 <td><code>"popover"</code></td>
@@ -276,17 +338,21 @@
                             </tr>
 
                             <tr>
-                                <td>okButtonText</td>
-                                <td>String</td>
-                                <td><code>"OK"</code></td>
-                                <td>The text of the OK button when the picker type is modal.</td>
+                                <td>appendDropdownToBody</td>
+                                <td>Boolean</td>
+                                <td><code>false</code></td>
+                                <td>
+                                    <p>Set to <code>true</code> to append the datepicker's dropdown to the document body, instead of the parent element.</p>
+                                </td>
                             </tr>
 
                             <tr>
-                                <td>cancelButtonText</td>
-                                <td>String</td>
-                                <td><code>"Cancel"</code></td>
-                                <td>The text of the Cancel button when the picker type is modal.</td>
+                                <td>dropdownZIndex</td>
+                                <td>Number</td>
+                                <td></td>
+                                <td>
+                                    <p>The datepicker's dropdown <code>z-index</code>.</p>
+                                </td>
                             </tr>
 
                             <tr>
@@ -339,6 +405,13 @@
                                     <p>Whether or not the label starts out inline and moves to float above the datepicker when it is focused.</p>
                                     <p>Set to <code>true</code> for a floating label. This will disable the placeholder.</p>
                                 </td>
+                            </tr>
+
+                            <tr>
+                                <td>tabindex</td>
+                                <td>Number, String</td>
+                                <td></td>
+                                <td>The datepicker <code>tabindex</code>.</td>
                             </tr>
 
                             <tr>
@@ -501,6 +574,20 @@
 
                         <tbody>
                             <tr>
+                                <td><code>focus()</code></td>
+                                <td>
+                                    <p>Call this method to programmatically focus the datepicker.</p>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td><code>clear()</code></td>
+                                <td>
+                                    <p>Call this method to clear the selected date.</p>
+                                </td>
+                            </tr>
+
+                            <tr>
                                 <td><code>reset()</code></td>
                                 <td>
                                     <p>Call this method to reset the datepicker to its initial value. You should also reset the <code>invalid</code> prop.</p>
@@ -520,7 +607,9 @@
 </template>
 
 <script>
+import UiButton from 'src/UiButton.vue';
 import UiDatepicker from 'src/UiDatepicker.vue';
+import UiModal from 'src/UiModal.vue';
 import UiTab from 'src/UiTab.vue';
 import UiTabs from 'src/UiTabs.vue';
 
@@ -536,10 +625,12 @@ export default {
             picker2: null,
             picker3: null,
             picker4: new Date((new Date()).getFullYear(), 11, 25),
+            picker401: '2019-01-08',
             picker5: null,
             picker6: null,
             picker7: null,
             picker8: null,
+            picker801: null,
             picker9: null,
             picker10: null,
             picker10Min: new Date(),
@@ -547,7 +638,10 @@ export default {
             picker11: null,
             picker12: null,
             picker12Lang: languageFr,
+            picker1201: null,
+            picker1202: null,
             picker13: null,
+            picker1301: null,
             picker14: null,
             picker15: new Date()
         };
@@ -560,11 +654,17 @@ export default {
 
         picker11Filter(date) {
             return date.getDay() !== 0 && date.getDay() !== 6;
+        },
+
+        openModal() {
+            this.$refs.modal.open();
         }
     },
 
     components: {
+        UiButton,
         UiDatepicker,
+        UiModal,
         UiTab,
         UiTabs
     }
@@ -576,8 +676,13 @@ export default {
 
 .page--ui-datepicker {
     .ui-datepicker {
-        max-width: rem-calc(400px);
-        margin-bottom: rem-calc(32px);
+        max-width: rem(400px);
+        margin-bottom: rem(32px);
+    }
+
+    .ui-modal .ui-datepicker {
+        max-width: none;
+        margin-bottom: 0;
     }
 }
 </style>

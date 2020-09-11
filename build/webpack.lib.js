@@ -1,6 +1,6 @@
 'use strict';
 
-const merge = require('deep-assign');
+const merge = require('deepmerge');
 const webpack = require('webpack');
 
 const options = require('./options');
@@ -18,6 +18,7 @@ const config = merge(base, {
         UiCollapsible: ['./src/UiCollapsible.vue'],
         UiConfirm: ['./src/UiConfirm.vue'],
         UiDatepicker: ['./src/UiDatepicker.vue'],
+        UiDatepickerCalendar: ['./src/UiDatepickerCalendar.vue'],
         UiFab: ['./src/UiFab.vue'],
         UiFileupload: ['./src/UiFileupload.vue'],
         UiIcon: ['./src/UiIcon.vue'],
@@ -57,7 +58,7 @@ const config = merge(base, {
             entryOnly: true
         })
     ]
-});
+}, { clone: false });
 
 // First item in module.rules array is Vue
 config.module.rules[0].options.loaders = {

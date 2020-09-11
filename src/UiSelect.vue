@@ -21,9 +21,8 @@
                 class="ui-select__label"
                 ref="label"
 
-                :tabindex="disabled ? null : '0'"
+                :tabindex="disabled ? null : (tabindex || '0')"
 
-                @click="toggleDropdown"
                 @focus="onFocus"
                 @keydown.enter.prevent="openDropdown"
                 @keydown.space.prevent="openDropdown"
@@ -31,7 +30,9 @@
             >
                 <div
                     class="ui-select__label-text"
+
                     :class="labelClasses"
+
                     v-if="label || $slots.default"
                 >
                     <slot>{{ label }}</slot>
@@ -50,10 +51,21 @@
                     </ui-icon>
                 </div>
 
-                <transition name="ui-select--transition-fade">
+                <ui-popover
+                    class="ui-select__dropdown"
+                    ref="dropdown"
+
+                    :close-on-scroll="false"
+                    :constrain-to-scroll-parent="false"
+                    :disabled="disabled"
+
+                    @close="onClose"
+                    @open="onOpen"
+                    @reveal="onReveal"
+                >
                     <div
-                        class="ui-select__dropdown"
-                        ref="dropdown"
+                        class="ui-select__dropdown-content"
+                        ref="dropdownContent"
                         tabindex="-1"
 
                         @keydown.down.prevent="highlightOption(highlightedIndex + 1)"
@@ -61,8 +73,6 @@
                         @keydown.esc.prevent="closeDropdown()"
                         @keydown.tab="onBlur"
                         @keydown.up.prevent="highlightOption(highlightedIndex - 1)"
-
-                        v-show="showDropdown"
                     >
                         <div
                             class="ui-select__search"
@@ -91,9 +101,11 @@
 
                             <ui-progress-circular
                                 class="ui-select__search-progress"
+
                                 :size="20"
                                 :stroke="4"
-                                v-show="loading"
+
+                                v-if="loading"
                             ></ui-progress-circular>
                         </div>
 
@@ -129,7 +141,7 @@
                             </div>
                         </ul>
                     </div>
-                </transition>
+                </ui-popover>
             </div>
 
             <div class="ui-select__feedback" v-if="hasFeedback">
@@ -147,19 +159,22 @@
 
 <script>
 import UiIcon from './UiIcon.vue';
+import UiPopover from './UiPopover.vue';
 import UiProgressCircular from './UiProgressCircular.vue';
 import UiSelectOption from './UiSelectOption.vue';
 
-import config from './config';
-import fuzzysearch from 'fuzzysearch';
+import RespondsToExternalClick from './mixins/RespondsToExternalClick';
 import { looseIndexOf, looseEqual } from './helpers/util';
 import { scrollIntoView, resetScroll } from './helpers/element-scroll';
+
+import fuzzysearch from 'fuzzysearch';
 
 export default {
     name: 'ui-select',
 
     props: {
         name: String,
+        tabindex: [String, Number],
         value: {
             type: [String, Number, Object, Array],
             required: true
@@ -217,7 +232,12 @@ export default {
         keys: {
             type: Object,
             default() {
-                return config.data.UiSelect.keys;
+                return {
+                    class: 'class',
+                    label: 'label',
+                    value: 'value',
+                    image: 'image'
+                };
             }
         },
         invalid: {
@@ -239,7 +259,6 @@ export default {
             isTouched: false,
             selectedIndex: -1,
             highlightedIndex: -1,
-            showDropdown: false,
             initialValue: JSON.stringify(this.value)
         };
     },
@@ -279,7 +298,7 @@ export default {
         },
 
         hasFeedback() {
-            return Boolean(this.help) || Boolean(this.error) || Boolean(this.$slots.error);
+            return this.showError || this.showHelp;
         },
 
         showError() {
@@ -287,7 +306,7 @@ export default {
         },
 
         showHelp() {
-            return !this.showError && (Boolean(this.help) || Boolean(this.$slots.help));
+            return Boolean(this.help) || Boolean(this.$slots.help);
         },
 
         filteredOptions() {
@@ -295,13 +314,19 @@ export default {
                 return this.options;
             }
 
-            return this.options.filter((option, index) => {
+            const options = this.options.filter(option => {
                 if (this.filter) {
-                    return this.filter(option, this.query);
+                    return this.filter(option, this.query, this.defaultFilter);
                 }
 
-                return this.defaultFilter(option, index);
+                return this.defaultFilter(option, this.query);
             });
+
+            if (this.sort) {
+                options.sort(this.sort.bind(this));
+            }
+
+            return options;
         },
 
         displayText() {
@@ -331,8 +356,8 @@ export default {
         },
 
         submittedValue() {
-            // Assuming that if there is no name, then there's no
-            // need to computed the submittedValue
+            // Assuming that if there is no name or no value,
+            // then there's no need to compute the submittedValue
             if (!this.name || !this.value) {
                 return;
             }
@@ -353,18 +378,16 @@ export default {
             resetScroll(this.$refs.optionsList);
         },
 
-        showDropdown() {
-            if (this.showDropdown) {
-                this.onOpen();
-                this.$emit('dropdown-open');
-            } else {
-                this.onClose();
-                this.$emit('dropdown-close');
-            }
-        },
-
         query() {
             this.$emit('query-change', this.query);
+        },
+
+        isActive(value) {
+            if (value) {
+                this.addExternalClickListener(this.$el, this.onExternalClick);
+            } else {
+                this.removeExternalClickListener();
+            }
         }
     },
 
@@ -372,14 +395,6 @@ export default {
         if (!this.value || this.value === '') {
             this.setValue(null);
         }
-    },
-
-    mounted() {
-        document.addEventListener('click', this.onExternalClick);
-    },
-
-    beforeDestroy() {
-        document.removeEventListener('click', this.onExternalClick);
     },
 
     methods: {
@@ -433,7 +448,10 @@ export default {
             });
 
             this.highlightedIndex = index;
-            this.clearQuery();
+
+            if (!this.multiple) {
+                this.clearQuery();
+            }
 
             if (!this.multiple && options.autoClose) {
                 this.closeDropdown();
@@ -468,23 +486,30 @@ export default {
             }
         },
 
-        defaultFilter(option) {
-            const query = this.query.toLowerCase();
+        defaultFilter(option, query) {
             let text = option[this.keys.label] || option;
 
             if (typeof text === 'string') {
                 text = text.toLowerCase();
             }
 
-            return fuzzysearch(query, text);
+            return fuzzysearch(query.toLowerCase(), text);
+        },
+
+        clearSelection() {
+            this.setValue(null);
         },
 
         clearQuery() {
             this.query = '';
         },
 
+        focus() {
+            this.$refs.label.focus();
+        },
+
         toggleDropdown() {
-            this[this.showDropdown ? 'closeDropdown' : 'openDropdown']();
+            this.$refs.dropdown.toggle();
         },
 
         openDropdown() {
@@ -492,24 +517,18 @@ export default {
                 return;
             }
 
-            this.showDropdown = true;
-
-            // IE: clicking label doesn't focus the select element
-            // to set isActive to true
-            if (!this.isActive) {
-                this.isActive = true;
-            }
+            this.$refs.dropdown.open();
         },
 
-        closeDropdown(options = { autoBlur: false }) {
-            this.showDropdown = false;
+        closeDropdown(options = { blurAfterClose: false }) {
+            this.$refs.dropdown.close();
 
             if (!this.isTouched) {
                 this.isTouched = true;
                 this.$emit('touch');
             }
 
-            if (options.autoBlur) {
+            if (options.blurAfterClose) {
                 this.isActive = false;
             } else {
                 this.$refs.label.focus();
@@ -529,29 +548,37 @@ export default {
             this.isActive = false;
             this.$emit('blur', e);
 
-            if (this.showDropdown) {
-                this.closeDropdown({ autoBlur: true });
+            if (this.$refs.dropdown.isOpen()) {
+                this.closeDropdown({ blurAfterClose: true });
             }
         },
 
         onOpen() {
+            this.isActive = true;
+
+            this.$refs.dropdown.$el.style.width = this.$refs.label.getBoundingClientRect().width + 'px';
+
             this.$nextTick(() => {
-                this.$refs[this.hasSearch ? 'searchInput' : 'dropdown'].focus();
                 this.scrollOptionIntoView(this.$refs.optionsList.querySelector('.is-selected'));
             });
+
+            this.$emit('dropdown-open');
+        },
+
+        onReveal() {
+            this.$refs[this.hasSearch ? 'searchInput' : 'dropdownContent'].focus();
         },
 
         onClose() {
             this.highlightedIndex = this.multiple ? -1 : this.selectedIndex;
+            this.$emit('dropdown-close');
         },
 
-        onExternalClick(e) {
-            if (!this.$el.contains(e.target)) {
-                if (this.showDropdown) {
-                    this.closeDropdown({ autoBlur: true });
-                } else if (this.isActive) {
-                    this.isActive = false;
-                }
+        onExternalClick() {
+            if (this.$refs.dropdown.isOpen()) {
+                this.closeDropdown({ blurAfterClose: true });
+            } else if (this.isActive) {
+                this.isActive = false;
             }
         },
 
@@ -578,9 +605,14 @@ export default {
 
     components: {
         UiIcon,
+        UiPopover,
         UiProgressCircular,
         UiSelectOption
-    }
+    },
+
+    mixins: [
+        RespondsToExternalClick
+    ]
 };
 </script>
 
@@ -659,8 +691,8 @@ export default {
     &.is-multiple {
         .ui-select__display {
             line-height: 1.4;
-            padding-bottom: rem-calc(4px);
-            padding-top: rem-calc(4px);
+            padding-bottom: rem(4px);
+            padding-top: rem(4px);
         }
     }
 
@@ -708,7 +740,6 @@ export default {
     margin: 0;
     outline: none;
     padding: 0;
-    position: relative;
     width: 100%;
 }
 
@@ -745,9 +776,10 @@ export default {
     color: $ui-input-text-color;
     cursor: pointer;
     display: flex;
-    font-family: $font-stack;
+    font-family: inherit;
     font-size: $ui-input-text-font-size;
     font-weight: normal;
+    min-height: $ui-input-height;
     padding: 0;
     transition: border 0.1s ease;
     user-select: none;
@@ -766,23 +798,22 @@ export default {
     color: $ui-input-button-color;
     font-size: $ui-input-button-size;
     margin-left: auto;
-    margin-right: rem-calc(-4px);
+    margin-right: rem(-4px);
 }
 
 .ui-select__dropdown {
-    background-color: white;
-    box-shadow: 1px 2px 8px $md-grey-600;
-    color: $primary-text-color;
     display: block;
     list-style-type: none;
     margin: 0;
-    margin-bottom: rem-calc(8px);
-    min-width: rem-calc(180px);
+    margin-bottom: rem(8px);
+    min-width: rem(180px);
     outline: none;
     padding: 0;
-    position: absolute;
     width: 100%;
-    z-index: $z-index-dropdown;
+}
+
+.ui-select__dropdown-content {
+    outline: none;
 }
 
 .ui-select__search-input {
@@ -794,13 +825,13 @@ export default {
     border-radius: 0;
     color: $ui-input-text-color;
     cursor: auto;
-    font-family: $font-stack;
-    font-size: $ui-input-text-font-size - rem-calc(1px);
+    font-family: inherit;
+    font-size: $ui-input-text-font-size - rem(1px);
     font-weight: normal;
-    height: $ui-input-height + rem-calc(4px);
+    height: $ui-input-height + rem(4px);
     outline: none;
-    padding: rem-calc(0 12px);
-    padding-left: rem-calc(40px);
+    padding: rem(0 12px);
+    padding-left: rem(40px);
     transition: border 0.1s ease;
     width: 100%;
 
@@ -812,22 +843,25 @@ export default {
     &:focus + .ui-select__search-icon {
         color: $ui-input-label-color--active;
     }
+
 }
 
-.ui-select__search-icon,
-.ui-select__search-progress {
-    position: absolute;
-    top: rem-calc(8px);
+.ui-select__search {
+    .ui-select__search-icon,
+    .ui-select__search-progress {
+        position: absolute;
+        top: rem(8px);
+    }
 }
 
 .ui-select__search-icon {
     color: $ui-input-icon-color;
-    font-size: rem-calc(20px);
-    left: rem-calc(12px);
+    font-size: rem(20px);
+    left: rem(12px);
 }
 
 .ui-select__search-progress {
-    right: rem-calc(12px);
+    right: rem(12px);
 }
 
 .ui-select__options {
@@ -836,7 +870,7 @@ export default {
     display: block;
     list-style-type: none;
     margin: 0;
-    max-height: rem-calc(256px);
+    max-height: rem(256px);
     min-width: 100%;
     overflow-y: auto;
     padding: 0;
@@ -845,8 +879,8 @@ export default {
 
 .ui-select__no-results {
     color: $secondary-text-color;
-    font-size: rem-calc(14px);
-    padding: rem-calc(8px 12px);
+    font-size: rem(14px);
+    padding: rem(8px 12px);
     width: 100%;
 }
 
@@ -865,23 +899,9 @@ export default {
 
 .ui-select--icon-position-right {
     .ui-select__icon-wrapper {
-        margin-left: rem-calc(8px);
+        margin-left: rem(8px);
         margin-right: 0;
         order: 1;
     }
-}
-
-// ================================================
-// Transitions
-// ================================================
-
-.ui-select--transition-fade-enter-active,
-.ui-select--transition-fade-leave-active {
-    transition: opacity 0.2s ease;
-}
-
-.ui-select--transition-fade-enter,
-.ui-select--transition-fade-leave-active {
-    opacity: 0;
 }
 </style>

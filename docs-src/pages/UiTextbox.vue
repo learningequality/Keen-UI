@@ -336,6 +336,15 @@
                             </tr>
 
                             <tr>
+                                <td>minlength</td>
+                                <td>Number</td>
+                                <td></td>
+                                <td>
+                                    <p>The <code>minlength</code> attribute of the input and textarea elements.</p>
+                                </td>
+                            </tr>
+
+                            <tr>
                                 <td>maxlength</td>
                                 <td>Number</td>
                                 <td></td>
@@ -392,6 +401,13 @@
                                     <p>Whether or not the textbox label starts out inline and moves to float above the input when it is focused.</p>
                                     <p>Set to <code>true</code> for a floating label. This will disable the input placeholder.</p>
                                 </td>
+                            </tr>
+
+                            <tr>
+                                <td>tabindex</td>
+                                <td>Number, String</td>
+                                <td></td>
+                                <td>The textbox input <code>tabindex</code>.</td>
                             </tr>
 
                             <tr>
@@ -555,6 +571,13 @@
 
                         <tbody>
                             <tr>
+                                <td><code>focus()</code></td>
+                                <td>
+                                    <p>Call this method to programmatically focus the textbox.</p>
+                                </td>
+                            </tr>
+
+                            <tr>
                                 <td><code>reset()</code></td>
                                 <td>
                                     <p>Call this method to reset the textbox to its initial value. You should also reset the <code>invalid</code> prop.</p>
@@ -620,7 +643,7 @@ export default {
 
 .page--ui-textbox {
     .ui-textbox {
-        max-width: rem-calc(600px);
+        max-width: rem(600px);
     }
 }
 </style>

@@ -1,6 +1,7 @@
 import UiAlert from './pages/UiAlert.vue';
 import UiAutocomplete from './pages/UiAutocomplete.vue';
 import UiButton from './pages/UiButton.vue';
+import UiCalendar from './pages/UiCalendar.vue';
 import UiCheckbox from './pages/UiCheckbox.vue';
 import UiCheckboxGroup from './pages/UiCheckboxGroup.vue';
 import UiCollapsible from './pages/UiCollapsible.vue';
@@ -49,6 +50,12 @@ const menu = [
                 component: UiButton,
                 title: 'UiButton',
                 sourceUrl: 'src/UiButton.vue'
+            },
+            {
+                path: '/ui-calendar',
+                component: UiCalendar,
+                title: 'UiCalendar',
+                sourceUrl: 'src/UiCalendar.vue'
             },
             {
                 path: '/ui-checkbox',

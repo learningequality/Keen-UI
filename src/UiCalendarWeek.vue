@@ -1,20 +1,18 @@
 <template>
-    <div class="ui-calendar-week">
-        <div
-            class="ui-calendar-week__date"
+    <tr class="ui-calendar-week" :class="classes">
+        <td :key="date.toString()" v-for="date in dates">
+            <button
+                class="ui-calendar-week__date"
 
-            :class="getDateClasses(date)"
-            :key="index"
-            :tabindex="(visible && !isDateDisabled(date)) ? 0 : null"
+                :class="getDateClasses(date)"
+                :disabled="isDateDisabled(date)"
 
-            @click="selectDate(date)"
-            @keydown.enter="selectDate(date)"
-
-            v-for="(date, index) in dates"
-        >
-            {{ getDayOfMonth(date) }}
-        </div>
-    </div>
+                @click="selectDate(date)"
+            >
+                <slot :date="date">{{ date.getDate() }}</slot>
+            </button>
+        </td>
+    </tr>
 </template>
 
 <script>
@@ -30,9 +28,13 @@ export default {
         maxDate: Date,
         selected: Date,
         dateFilter: Function,
-        visible: {
+        color: {
+            type: String,
+            default: 'primary'
+        },
+        squareCells: {
             type: Boolean,
-            default: true
+            default: false
         }
     },
 
@@ -45,6 +47,13 @@ export default {
     computed: {
         dates() {
             return this.buildDays(this.weekStart);
+        },
+
+        classes() {
+            return [
+                `ui-calendar-week--color-${this.color}`,
+                { 'ui-calendar-week--has-square-cells': this.squareCells }
+            ];
         }
     },
 
@@ -80,10 +89,6 @@ export default {
             this.$emit('date-select', date);
         },
 
-        getDayOfMonth(date) {
-            return dateUtils.getDayOfMonth(date);
-        },
-
         isDateInOtherMonth(date) {
             return this.month !== date.getMonth();
         },
@@ -106,21 +111,55 @@ export default {
 @import './styles/imports';
 
 .ui-calendar-week {
-    display: flex;
-    font-size: rem-calc(14px);
+    font-size: rem(14px);
     width: 100%;
+
+    td {
+        width: (100% / 7);
+        min-width: $ui-calendar-cell-size;
+        position: relative;
+    }
+}
+
+.ui-calendar-week--has-square-cells {
+    td {
+        // This makes the <td> square, while keeping it responsive
+        &::before {
+            box-sizing: border-box;
+            content:'';
+            display: block;
+            padding-top: 100%;
+            min-height: $ui-calendar-cell-size;
+        }
+    }
+
+    .ui-calendar-week__date {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        border-radius: 50%;
+    }
 }
 
 .ui-calendar-week__date {
     align-items: center;
-    border-radius: 50%;
+    border-radius: 2px;
     cursor: pointer;
     display: flex;
-    height: $ui-calendar-cell-size;
     justify-content: center;
     outline: none;
     text-align: center;
-    width: $ui-calendar-cell-size;
+    appearance: none;
+    background-color: transparent;
+    border: none;
+    width: 100%;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1;
+    margin: 0;
+    min-height: $ui-calendar-cell-size;
+    padding: 0;
 
     &:hover,
     body[modality="keyboard"] &:focus {
@@ -133,22 +172,52 @@ export default {
 
     &.is-today {
         font-weight: bold;
-        // color is defined in UiCalendar
-
-        &.is-selected {
-            color: white;
-        }
-    }
-
-    &.is-selected {
-        color: white;
-        // background color is defined in UiCalendar
     }
 
     &.is-disabled {
         background-color: transparent;
         cursor: default;
         opacity: 0.4;
+    }
+}
+
+// ================================================
+// Colors
+// ================================================
+
+.ui-calendar-week--color-primary {
+    .ui-calendar-week__date {
+        &.is-today {
+            color: $brand-primary-color;
+
+            &.is-selected {
+                color: white;
+            }
+        }
+
+        &.is-selected,
+        body[modality="keyboard"] &.is-selected {
+            background-color: $brand-primary-color;
+            color: white;
+        }
+    }
+}
+
+.ui-calendar-week--color-accent {
+    .ui-calendar-week__date {
+        &.is-today {
+            color: $brand-accent-color;
+
+            &.is-selected {
+                color: white;
+            }
+        }
+
+        &.is-selected,
+        body[modality="keyboard"] &.is-selected {
+            background-color: $brand-accent-color;
+            color: white;
+        }
     }
 }
 </style>
